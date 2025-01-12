@@ -2,7 +2,7 @@
 mkdir -p ./keys
 
 # Deployer wallet
-solana-keygen new --outfile ./keys/deployer-keypair.json
+solana-keygen new --no-bip39-passphrase --outfile ./keys/deployer-keypair.json
 echo export DEPLOYER_WALLET=$(solana-keygen pubkey ./keys/deployer-keypair.json) >> .env
 
 # User wallet

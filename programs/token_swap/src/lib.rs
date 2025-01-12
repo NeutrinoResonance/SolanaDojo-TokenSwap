@@ -7,8 +7,10 @@ declare_id!("6sicUYhh37rpGdLWQSrxRMshaUCgsteAHXcwn1jLmwUa");
 pub mod token_swap {
     use super::*;
 
-    pub fn initialize_pool(ctx: Context<InitializePool>, pool_number: u64) -> Result<()> {
-        ctx.accounts.pool.pool_number = pool_number;
+    pub fn initialize_pool(ctx: Context<InitializePool>, pool_name: String, initial_swap_rate: u64) -> Result<()> {
+        ctx.accounts.pool.pool_name = pool_name;
+        ctx.accounts.pool.swap_rate = initial_swap_rate;
+        ctx.accounts.pool.authority = ctx.accounts.authority.key();
         Ok(())
     }
 
@@ -16,9 +18,20 @@ pub mod token_swap {
         Ok(())
     }
 
-    pub fn swap(ctx: Context<Swap>, amount: u64, swap_rate: u64) -> Result<()> {
-        // Calculate amount of token B to receive
-        let amount_b = amount.checked_mul(swap_rate).ok_or(ErrorCode::NumericalOverflow)?;
+    pub fn update_swap_rate(ctx: Context<UpdateSwapRate>, new_swap_rate: u64) -> Result<()> {
+        require!(
+            ctx.accounts.authority.key() == ctx.accounts.pool.authority,
+            ErrorCode::UnauthorizedPoolAccess
+        );
+        ctx.accounts.pool.swap_rate = new_swap_rate;
+        Ok(())
+    }
+
+    pub fn swap(ctx: Context<Swap>, amount: u64) -> Result<()> {
+        // Calculate amount of token B to receive using pool's swap rate
+        let amount_b = amount
+            .checked_mul(ctx.accounts.pool.swap_rate)
+            .ok_or(ErrorCode::NumericalOverflow)?;
 
         // Transfer token A from user to pool
         token::transfer(
@@ -44,7 +57,7 @@ pub mod token_swap {
                 },
                 &[&[
                     b"pool",
-                    &ctx.accounts.pool.pool_number.to_le_bytes(),
+                    ctx.accounts.pool.pool_name.as_bytes(),
                     &[ctx.bumps.pool]
                 ]]
             ),
@@ -56,20 +69,32 @@ pub mod token_swap {
 }
 
 #[derive(Accounts)]
-#[instruction(pool_number: u64)]
+#[instruction(pool_name: String)]
 pub struct InitializePool<'info> {
     #[account(
         init,
         payer = payer,
-        seeds = [b"pool", pool_number.to_le_bytes().as_ref()],
+        seeds = [b"pool", pool_name.as_bytes()],
         bump,
-        space = 8 + 8  // discriminator + pool_number
+        space = 8 + Pool::INIT_SPACE
     )]
     pub pool: Account<'info, Pool>,
+    
+    /// The authority that can update the swap rate
+    pub authority: Signer<'info>,
     
     #[account(mut)]
     pub payer: Signer<'info>,
     pub system_program: Program<'info, System>,
+}
+
+#[derive(Accounts)]
+pub struct UpdateSwapRate<'info> {
+    #[account(mut)]
+    pub pool: Account<'info, Pool>,
+    
+    /// CHECK: Authority is checked in the instruction
+    pub authority: Signer<'info>,
 }
 
 #[derive(Accounts)]
@@ -80,7 +105,7 @@ pub struct InitializePoolTokens<'info> {
     #[account(
         init,
         payer = payer,
-        seeds = [b"pool_token_a", pool.pool_number.to_le_bytes().as_ref()],
+        seeds = [b"pool_token_a", pool.pool_name.as_bytes()],
         bump,
         token::mint = mint_a,
         token::authority = pool
@@ -90,7 +115,7 @@ pub struct InitializePoolTokens<'info> {
     #[account(
         init,
         payer = payer,
-        seeds = [b"pool_token_b", pool.pool_number.to_le_bytes().as_ref()],
+        seeds = [b"pool_token_b", pool.pool_name.as_bytes()],
         bump,
         token::mint = mint_b,
         token::authority = pool
@@ -110,14 +135,14 @@ pub struct InitializePoolTokens<'info> {
 #[derive(Accounts)]
 pub struct Swap<'info> {
     #[account(
-        seeds = [b"pool", pool.pool_number.to_le_bytes().as_ref()],
+        seeds = [b"pool", pool.pool_name.as_bytes()],
         bump,
     )]
     pub pool: Account<'info, Pool>,
 
     #[account(
         mut,
-        seeds = [b"pool_token_a", pool.pool_number.to_le_bytes().as_ref()],
+        seeds = [b"pool_token_a", pool.pool_name.as_bytes()],
         bump,
         token::mint = mint_a,
         token::authority = pool
@@ -126,7 +151,7 @@ pub struct Swap<'info> {
 
     #[account(
         mut,
-        seeds = [b"pool_token_b", pool.pool_number.to_le_bytes().as_ref()],
+        seeds = [b"pool_token_b", pool.pool_name.as_bytes()],
         bump,
         token::mint = mint_b,
         token::authority = pool
@@ -146,12 +171,20 @@ pub struct Swap<'info> {
 }
 
 #[account]
+#[derive(InitSpace)]
 pub struct Pool {
-    pub pool_number: u64,
+    #[max_len(32)]
+    pub pool_name: String,
+    pub swap_rate: u64,
+    pub authority: Pubkey,
 }
 
 #[error_code]
 pub enum ErrorCode {
     #[msg("Numerical overflow")]
     NumericalOverflow,
+    #[msg("Unauthorized access to pool")]
+    UnauthorizedPoolAccess,
+    #[msg("Pool name must be 32 characters or less")]
+    PoolNameTooLong,
 }
