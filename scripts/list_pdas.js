@@ -9,7 +9,7 @@ async function main() {
     // Read the IDL
     const idlPath = './target/idl/token_swap.json';
     const idl = JSON.parse(fs.readFileSync(idlPath, 'utf8'));
-    const programId = new anchor.web3.PublicKey("AxNHE5L2X5PZoAU3To5tUQC2S7Z44RjeqAEwwe4FSWxa");
+    const programId = new anchor.web3.PublicKey(idl.account);
 
     // Get all accounts owned by the program
     const accounts = await provider.connection.getProgramAccounts(programId);

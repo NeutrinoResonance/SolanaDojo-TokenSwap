@@ -21,6 +21,7 @@ async function main() {
     // Get token mints from e2e_test files
     const mintAContent = fs.readFileSync('./e2e_test/tokens/output-spl_token_a.txt', 'utf8');
     const mintBContent = fs.readFileSync('./e2e_test/tokens/output-spl_token_b.txt', 'utf8');
+    
     /* console.log(mintAContent);
     console.log(mintBContent); */
 
