@@ -30,6 +30,13 @@ backup_if_exists() {
     fi
 }
 
+extract_account_address() {
+    local output_file="$1"
+    
+    # Extract address that comes after "Creating account"
+    grep "Creating account" "$output_file" | awk '{print $3}'
+}
+
 extract_mint_address() {
   local output_file="$1"
 
@@ -75,3 +82,10 @@ echo "Token B mint address: $MINT_ADDRESS_B"
 
 spl-token create-account $MINT_ADDRESS_A > $ACCOUNT_A_PATH
 spl-token create-account $MINT_ADDRESS_B > $ACCOUNT_B_PATH
+
+
+TOKEN_ACCOUNT_A=$(extract_account_address "$ACCOUNT_A_PATH")
+TOKEN_ACCOUNT_B=$(extract_account_address "$ACCOUNT_B_PATH")
+
+spl-token mint $MINT_ADDRESS_A 1000000000 $TOKEN_ACCOUNT_A
+spl-token mint $MINT_ADDRESS_B 1000000000 $TOKEN_ACCOUNT_B

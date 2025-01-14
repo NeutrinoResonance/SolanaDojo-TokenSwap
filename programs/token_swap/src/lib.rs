@@ -27,6 +27,36 @@ pub mod token_swap {
         Ok(())
     }
 
+    pub fn deposit(ctx: Context<Deposit>, amount_a: u64, amount_b: u64) -> Result<()> {
+        // Transfer token A from depositor to pool
+        token::transfer(
+            CpiContext::new(
+                ctx.accounts.token_program.to_account_info(),
+                Transfer {
+                    from: ctx.accounts.depositor_token_a.to_account_info(),
+                    to: ctx.accounts.pool_token_a.to_account_info(),
+                    authority: ctx.accounts.depositor.to_account_info(),
+                }
+            ),
+            amount_a
+        )?;
+
+        // Transfer token B from depositor to pool
+        token::transfer(
+            CpiContext::new(
+                ctx.accounts.token_program.to_account_info(),
+                Transfer {
+                    from: ctx.accounts.depositor_token_b.to_account_info(),
+                    to: ctx.accounts.pool_token_b.to_account_info(),
+                    authority: ctx.accounts.depositor.to_account_info(),
+                }
+            ),
+            amount_b
+        )?;
+
+        Ok(())
+    }
+
     pub fn swap(ctx: Context<Swap>, amount: u64) -> Result<()> {
         // Calculate amount of token B to receive using pool's swap rate
         let amount_b = amount
@@ -130,6 +160,40 @@ pub struct InitializePoolTokens<'info> {
     pub system_program: Program<'info, System>,
     pub token_program: Program<'info, Token>,
     pub rent: Sysvar<'info, Rent>,
+}
+
+#[derive(Accounts)]
+pub struct Deposit<'info> {
+    pub pool: Account<'info, Pool>,
+
+    #[account(
+        mut,
+        seeds = [b"pool_token_a", pool.pool_name.as_bytes()],
+        bump,
+        token::mint = mint_a,
+        token::authority = pool
+    )]
+    pub pool_token_a: Account<'info, TokenAccount>,
+
+    #[account(
+        mut,
+        seeds = [b"pool_token_b", pool.pool_name.as_bytes()],
+        bump,
+        token::mint = mint_b,
+        token::authority = pool
+    )]
+    pub pool_token_b: Account<'info, TokenAccount>,
+
+    pub mint_a: Account<'info, Mint>,
+    pub mint_b: Account<'info, Mint>,
+
+    #[account(mut)]
+    pub depositor_token_a: Account<'info, TokenAccount>,
+    #[account(mut)]
+    pub depositor_token_b: Account<'info, TokenAccount>,
+
+    pub depositor: Signer<'info>,
+    pub token_program: Program<'info, Token>,
 }
 
 #[derive(Accounts)]
